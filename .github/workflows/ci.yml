@@ -99,6 +99,9 @@ jobs:
           echo "--- labels as seen by the Kubernetes API: ---"
           sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
             get namespace apps -o jsonpath='{.metadata.labels}' && echo
+          echo "--- Terraform env vars (checking for refresh overrides): ---"
+          env | grep -i "^TF_" | sort || echo "(no TF_ env vars set)"
+          echo "--- TF_CLI_ARGS_plan=[${TF_CLI_ARGS_plan-unset}] ---"
           if ./scripts/drift-detect.sh; then
             echo "expected drift to be detected, but got a clean verdict" >&2
             echo "--- labels in terraform state: ---"
