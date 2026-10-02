@@ -39,8 +39,10 @@ flowchart TB
 | **Drift detection** | A watchdog script that compares the live cluster against the blueprint — catches manual changes |
 
 ## The drift demo (the fun part)
+> **Note:** if you cloned this repo, run `chmod +x scripts/drift-detect.sh` once first — the executable bit doesn't survive every download method.
 
 ```bash
+
 cd demo/k8s-platform
 terraform apply -auto-approve     # builds a 15-resource hardened baseline
 
