@@ -1,0 +1,107 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  TF_VERSION: "1.9.8"
+  K3S_VERSION: "v1.31.4+k3s1"
+
+jobs:
+  fmt:
+    name: terraform fmt
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - run: terraform fmt -check -recursive
+
+  validate:
+    name: terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - name: Validate AWS root config (no backend, no credentials needed)
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+      - name: Validate demo k8s-platform config
+        run: |
+          cd demo/k8s-platform
+          terraform init -backend=false -input=false
+          terraform validate
+      - name: Validate GCP module (no backend, no credentials needed)
+        run: |
+          cd modules/gcp
+          terraform init -backend=false -input=false
+          terraform validate
+
+  tflint:
+    name: tflint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+      - uses: terraform-linters/setup-tflint@v4
+      - run: |
+          terraform init -backend=false -input=false
+          tflint --init
+          tflint --recursive --format compact
+
+  drift-check:
+    name: drift detection end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Start throwaway k3s API server
+        run: |
+          curl -sSL -o k3s "https://github.com/k3s-io/k3s/releases/download/v1.31.4%2Bk3s1/k3s"
+          chmod +x k3s
+          sudo mv k3s /usr/local/bin/k3s
+          sudo nohup /usr/local/bin/k3s server --disable-agent --disable traefik \
+            --disable servicelb --flannel-backend=none --disable-network-policy \
+            --disable-helm-controller --disable-cloud-controller >/tmp/k3s.log 2>&1 &
+          for i in $(seq 1 24); do
+            sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get ns >/dev/null 2>&1 && break
+            sleep 5
+          done
+          sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml get ns
+          sudo chmod 644 /etc/rancher/k3s/k3s.yaml
+
+      - name: Apply demo platform
+        run: |
+          cd demo/k8s-platform
+          terraform init -input=false
+          terraform apply -input=false -auto-approve
+
+      - name: Drift check on clean state (expects NO DRIFT)
+        run: ./scripts/drift-detect.sh
+
+      - name: Inject out-of-band change, expect DRIFT DETECTED
+        run: |
+          sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
+            label namespace apps drift-demo=true --overwrite
+          if ./scripts/drift-detect.sh; then
+            echo "expected drift to be detected, but got a clean verdict" >&2
+            exit 1
+          fi
+          echo "drift correctly detected"
+
+      - name: Revert injected change
+        run: |
+          sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
+            label namespace apps drift-demo-
+          ./scripts/drift-detect.sh
