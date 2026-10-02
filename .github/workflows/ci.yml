@@ -96,8 +96,13 @@ jobs:
         run: |
           sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
             label namespace apps drift-demo=true --overwrite
+          echo "--- labels as seen by the Kubernetes API: ---"
+          sudo /usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml \
+            get namespace apps -o jsonpath='{.metadata.labels}' && echo
           if ./scripts/drift-detect.sh; then
             echo "expected drift to be detected, but got a clean verdict" >&2
+            echo "--- labels in terraform state: ---"
+            terraform -chdir=demo/k8s-platform state show 'kubernetes_namespace.this["apps"]' | grep -A8 'labels' || true
             exit 1
           fi
           echo "drift correctly detected"
