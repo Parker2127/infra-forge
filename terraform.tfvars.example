@@ -1,0 +1,31 @@
+# Copy to terraform.tfvars and fill in. Never commit the real one.
+project     = "infra-forge"
+environment = "dev"
+region      = "us-east-1"
+
+vpc_cidr = "10.0.0.0/16"
+azs      = ["us-east-1a", "us-east-1b"]
+
+kubernetes_version  = "1.31"
+node_instance_types = ["t3.medium"]
+node_desired_size   = 2
+
+# SSO permission-set / admin role ARNs that may assume cluster-admin:
+admin_principal_arns = [
+  # "arn:aws:iam::123456789012:role/AWSReservedSSO_PlatformAdmin_abc123",
+]
+
+# Prefer TF_VAR_grafana_admin_password from a secrets manager in real use:
+# grafana_admin_password = "change-me-in-prod"
+
+tags = {
+  Owner = "platform-team"
+}
+
+# --- GCP path (opt-in; validate-only without GCP credentials) ---------------
+# enable_gcp       = true
+# gcp_project_id   = "my-project-123456"
+# gcp_region       = "asia-south1"
+# gcp_node_count   = 2
+# gcp_node_min_count = 1
+# gcp_node_max_count = 5
